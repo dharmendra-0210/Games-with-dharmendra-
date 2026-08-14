@@ -1,0 +1,160 @@
+import pygame
+import random
+import sys
+
+# Initialize Pygame
+pygame.init()
+
+# Game Constants
+WIDTH, HEIGHT = 600, 600
+GRID_SIZE = 20
+GRID_WIDTH = WIDTH // GRID_SIZE
+GRID_HEIGHT = HEIGHT // GRID_SIZE
+FPS = 10
+
+# Colors (RGB)
+BLACK = (15, 15, 15)
+WHITE = (255, 255, 255)
+GREEN = (46, 204, 113)
+RED = (231, 76, 60)
+DARK_GRAY = (40, 40, 40)
+
+# Set up Display Window
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Python Snake Game")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("Arial", 24)
+
+
+class Snake:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.body = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
+        self.direction = (1, 0)  # Start moving Right
+        self.grow = False
+
+    def update(self):
+        head_x, head_y = self.body[0]
+        dir_x, dir_y = self.direction
+        new_head = (head_x + dir_x, head_y + dir_y)
+
+        # Check self-collision or wall-collision
+        if (
+            new_head in self.body
+            or new_head[0] < 0
+            or new_head[0] >= GRID_WIDTH
+            or new_head[1] < 0
+            or new_head[1] >= GRID_HEIGHT
+        ):
+            return False  # Game Over
+
+        self.body.insert(0, new_head)
+        if not self.grow:
+            self.body.pop()
+        else:
+            self.grow = False
+        return True
+
+    def draw(self, surface):
+        for segment in self.body:
+            rect = pygame.Rect(
+                segment[0] * GRID_SIZE, segment[1] * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1
+            )
+            pygame.draw.rect(surface, GREEN, rect)
+
+
+class Food:
+    def __init__(self, snake_body):
+        self.respawn(snake_body)
+
+    def respawn(self, snake_body):
+        while True:
+            self.position = (
+                random.randint(0, GRID_WIDTH - 1),
+                random.randint(0, GRID_HEIGHT - 1),
+            )
+            if self.position not in snake_body:
+                break
+
+    def draw(self, surface):
+        rect = pygame.Rect(
+            self.position[0] * GRID_SIZE,
+            self.position[1] * GRID_SIZE,
+            GRID_SIZE - 1,
+            GRID_SIZE - 1,
+        )
+        pygame.draw.rect(surface, RED, rect)
+
+
+def draw_grid(surface):
+    for x in range(0, WIDTH, GRID_SIZE):
+        pygame.draw.line(surface, DARK_GRAY, (x, 0), (x, HEIGHT))
+    for y in range(0, HEIGHT, GRID_SIZE):
+        pygame.draw.line(surface, DARK_GRAY, (0, y), (WIDTH, y))
+
+
+def main():
+    snake = Snake()
+    food = Food(snake.body)
+    score = 0
+    game_over = False
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            elif event.type == pygame.KEYDOWN:
+                if game_over and event.key == pygame.K_SPACE:
+                    snake.reset()
+                    food.respawn(snake.body)
+                    score = 0
+                    game_over = False
+
+                elif not game_over:
+                    # Prevent 180-degree immediate turns
+                    if event.key == pygame.K_UP and snake.direction != (0, 1):
+                        snake.direction = (0, -1)
+                    elif event.key == pygame.K_DOWN and snake.direction != (0, -1):
+                        snake.direction = (0, 1)
+                    elif event.key == pygame.K_LEFT and snake.direction != (1, 0):
+                        snake.direction = (-1, 0)
+                    elif event.key == pygame.K_RIGHT and snake.direction != (-1, 0):
+                        snake.direction = (1, 0)
+
+        if not game_over:
+            # Move Snake
+            if not snake.update():
+                game_over = True
+
+            # Check if snake ate food
+            if snake.body[0] == food.position:
+                snake.grow = True
+                score += 10
+                food.respawn(snake.body)
+
+        # Render elements
+        screen.fill(BLACK)
+        draw_grid(screen)
+        snake.draw(screen)
+        food.draw(screen)
+
+        # Draw Score
+        score_surface = font.render(f"Score: {score}", True, WHITE)
+        screen.blit(score_surface, (10, 10))
+
+        # Game Over Overlay
+        if game_over:
+            over_surface = font.render("GAME OVER! Press SPACE to Restart", True, RED)
+            rect = over_surface.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            screen.blit(over_surface, rect)
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+
+if __name__ == "__main__":
+    main()
