@@ -1,0 +1,227 @@
+import pygame
+import random
+import sys
+
+# Initialize Pygame
+pygame.init()
+
+# Screen dimensions
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 600
+
+# Colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GRAY = (100, 100, 100)
+
+# Game settings
+PADDLE_WIDTH = 15
+PADDLE_HEIGHT = 100
+BALL_SIZE = 10
+PADDLE_SPEED = 6
+BALL_SPEED = 5
+AI_SPEED = 4.5
+
+class Paddle:
+    """Player and Computer paddle class"""
+    def __init__(self, x, y):
+        self.rect = pygame.Rect(x, y, PADDLE_WIDTH, PADDLE_HEIGHT)
+        self.speed = PADDLE_SPEED
+
+    def move_up(self):
+        if self.rect.top > 0:
+            self.rect.y -= self.speed
+
+    def move_down(self):
+        if self.rect.bottom < SCREEN_HEIGHT:
+            self.rect.y += self.speed
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, WHITE, self.rect)
+
+    def ai_move(self, ball):
+        """AI logic for computer paddle"""
+        paddle_center = self.rect.centery
+        ball_center = ball.rect.centery
+
+        # Add some error to make AI beatable
+        error = random.randint(-30, 30)
+
+        if paddle_center < ball_center + error:
+            self.move_down()
+        elif paddle_center > ball_center + error:
+            self.move_up()
+
+
+class Ball:
+    """Ball class with physics"""
+    def __init__(self):
+        self.rect = pygame.Rect(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2, BALL_SIZE, BALL_SIZE)
+        self.speed_x = BALL_SPEED * random.choice([-1, 1])
+        self.speed_y = BALL_SPEED * random.choice([-1, 1])
+
+    def move(self):
+        """Move the ball"""
+        self.rect.x += self.speed_x
+        self.rect.y += self.speed_y
+
+    def bounce_y(self):
+        """Bounce off top and bottom walls"""
+        self.speed_y = -self.speed_y
+
+    def bounce_x(self):
+        """Bounce off paddles"""
+        self.speed_x = -self.speed_x
+
+    def reset(self):
+        """Reset ball to center"""
+        self.rect.center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        self.speed_x = BALL_SPEED * random.choice([-1, 1])
+        self.speed_y = BALL_SPEED * random.choice([-1, 1])
+
+    def draw(self, screen):
+        pygame.draw.rect(screen, WHITE, self.rect)
+
+
+class PongGame:
+    """Main game class"""
+    def __init__(self):
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        pygame.display.set_caption("Pong Game")
+        self.clock = pygame.time.Clock()
+        self.font = pygame.font.Font(None, 74)
+        self.small_font = pygame.font.Font(None, 36)
+
+        # Create game objects
+        self.player_paddle = Paddle(20, SCREEN_HEIGHT // 2 - PADDLE_HEIGHT // 2)
+        self.ai_paddle = Paddle(SCREEN_WIDTH - 20 - PADDLE_WIDTH, SCREEN_HEIGHT // 2 - PADDLE_HEIGHT // 2)
+        self.ball = Ball()
+
+        # Score
+        self.player_score = 0
+        self.ai_score = 0
+
+        # Game state
+        self.running = True
+        self.game_over = False
+
+    def handle_events(self):
+        """Handle user input"""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.running = False
+
+        # Continuous key checking
+        keys = pygame.key.get_pressed()
+        
+        # Arrow keys or W/S for player movement
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            self.player_paddle.move_up()
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            self.player_paddle.move_down()
+
+        # Mouse control for paddle
+        mouse_y = pygame.mouse.get_pos()[1]
+        paddle_center = self.player_paddle.rect.centery
+        
+        # Move paddle towards mouse position
+        if mouse_y < paddle_center - 5:
+            self.player_paddle.move_up()
+        elif mouse_y > paddle_center + 5:
+            self.player_paddle.move_down()
+
+    def check_collisions(self):
+        """Check collision detection"""
+        # Ball collision with top and bottom walls
+        if self.ball.rect.top <= 0 or self.ball.rect.bottom >= SCREEN_HEIGHT:
+            self.ball.bounce_y()
+            # Keep ball in bounds
+            self.ball.rect.y = max(0, min(self.ball.rect.y, SCREEN_HEIGHT - BALL_SIZE))
+
+        # Ball collision with paddles
+        if self.ball.rect.colliderect(self.player_paddle.rect):
+            if self.ball.speed_x < 0:  # Only bounce if moving towards paddle
+                self.ball.bounce_x()
+                # Add spin based on where ball hits paddle
+                hit_pos = (self.ball.rect.centery - self.player_paddle.rect.centery) / PADDLE_HEIGHT
+                self.ball.speed_y += hit_pos * 4
+                self.ball.rect.left = self.player_paddle.rect.right
+
+        if self.ball.rect.colliderect(self.ai_paddle.rect):
+            if self.ball.speed_x > 0:  # Only bounce if moving towards paddle
+                self.ball.bounce_x()
+                # Add spin based on where ball hits paddle
+                hit_pos = (self.ball.rect.centery - self.ai_paddle.rect.centery) / PADDLE_HEIGHT
+                self.ball.speed_y += hit_pos * 4
+                self.ball.rect.right = self.ai_paddle.rect.left
+
+        # Scoring - ball goes out of bounds
+        if self.ball.rect.left < 0:
+            self.ai_score += 1
+            self.ball.reset()
+        elif self.ball.rect.right > SCREEN_WIDTH:
+            self.player_score += 1
+            self.ball.reset()
+
+    def update(self):
+        """Update game logic"""
+        if not self.game_over:
+            self.ball.move()
+            self.ai_paddle.ai_move(self.ball)
+            self.check_collisions()
+
+            # Check win condition (optional: first to 11 wins)
+            if self.player_score >= 11 or self.ai_score >= 11:
+                self.game_over = True
+
+    def draw(self):
+        """Draw everything"""
+        self.screen.fill(BLACK)
+
+        # Draw center line
+        for y in range(0, SCREEN_HEIGHT, 20):
+            pygame.draw.line(self.screen, GRAY, (SCREEN_WIDTH // 2, y), (SCREEN_WIDTH // 2, y + 10), 2)
+
+        # Draw paddles and ball
+        self.player_paddle.draw(self.screen)
+        self.ai_paddle.draw(self.screen)
+        self.ball.draw(self.screen)
+
+        # Draw scores
+        player_text = self.font.render(str(self.player_score), True, WHITE)
+        ai_text = self.font.render(str(self.ai_score), True, WHITE)
+        self.screen.blit(player_text, (SCREEN_WIDTH // 4, 50))
+        self.screen.blit(ai_text, (3 * SCREEN_WIDTH // 4 - player_text.get_width(), 50))
+
+        # Draw game over message
+        if self.game_over:
+            if self.player_score > self.ai_score:
+                winner_text = self.small_font.render("YOU WIN! Press ESC to exit", True, WHITE)
+            else:
+                winner_text = self.small_font.render("YOU LOST! Press ESC to exit", True, WHITE)
+            self.screen.blit(winner_text, (SCREEN_WIDTH // 2 - winner_text.get_width() // 2, SCREEN_HEIGHT // 2))
+
+        # Draw instructions
+        instructions = self.small_font.render("UP/DOWN or W/S or MOUSE to move", True, GRAY)
+        self.screen.blit(instructions, (20, SCREEN_HEIGHT - 40))
+
+        pygame.display.flip()
+
+    def run(self):
+        """Main game loop"""
+        while self.running:
+            self.handle_events()
+            self.update()
+            self.draw()
+            self.clock.tick(60)  # 60 FPS
+
+        pygame.quit()
+        sys.exit()
+
+
+if __name__ == "__main__":
+    game = PongGame()
+    game.run()
